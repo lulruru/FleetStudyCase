@@ -30,6 +30,8 @@ module.exports = (db) => {
       (err, product) => {
         if (err || !product)
           return res.status(404).json({ message: "Product not found" });
+        if (product.stock < quantity)
+          return res.status(400).json({ message: "Not enough stock" });
 
         db.get(
           "SELECT * FROM cart_items WHERE product_id = ?",
@@ -44,6 +46,10 @@ module.exports = (db) => {
                     return res
                       .status(500)
                       .json({ message: "Failed to update cart" });
+                  db.run("UPDATE products SET stock = stock - ? WHERE id = ?", [
+                    quantity,
+                    productId,
+                  ]);
                   res.json({ success: true });
                 },
               );
@@ -56,6 +62,10 @@ module.exports = (db) => {
                     return res
                       .status(500)
                       .json({ message: "Failed to add to cart" });
+                  db.run("UPDATE products SET stock = stock - ? WHERE id = ?", [
+                    quantity,
+                    productId,
+                  ]);
                   res.status(201).json({ success: true });
                 },
               );
@@ -68,33 +78,63 @@ module.exports = (db) => {
 
   router.put("/cart/:id", (req, res) => {
     const id = Number(req.params.id);
-    const quantity = Number(req.body?.quantity);
-    if (!quantity || quantity < 1)
-      return res.status(400).json({ message: " quantity must be >= 1" });
-    db.run(
-      "UPDATE cart_items SET quantity = ? WHERE id = ?",
-      [quantity, id],
-      function (err) {
-        if (err)
-          return res
-            .status(500)
-            .json({ message: "Failed to update cart item" });
-        if (this.changes === 0)
-          return res.status(404).json({ message: "Cart item not found" });
-        res.json({ success: true });
-      },
-    );
+    const newQuantity = Number(req.body?.quantity);
+    if (!newQuantity || newQuantity < 1)
+      return res.status(400).json({ message: "quantity must be >= 1" });
+
+    db.get("SELECT * FROM cart_items WHERE id = ?", [id], (err, item) => {
+      if (err || !item)
+        return res.status(404).json({ message: "Cart item not found" });
+
+      const diff = newQuantity - item.quantity;
+
+      db.get(
+        "SELECT * FROM products WHERE id = ?",
+        [item.product_id],
+        (err2, product) => {
+          if (err2 || !product)
+            return res.status(404).json({ message: "Product not found" });
+          if (diff > 0 && product.stock < diff)
+            return res.status(400).json({ message: "Not enough stock" });
+
+          db.run(
+            "UPDATE cart_items SET quantity = ? WHERE id = ?",
+            [newQuantity, id],
+            (err3) => {
+              if (err3)
+                return res
+                  .status(500)
+                  .json({ message: "Failed to update cart item" });
+              db.run("UPDATE products SET stock = stock - ? WHERE id = ?", [
+                diff,
+                item.product_id,
+              ]);
+              res.json({ success: true });
+            },
+          );
+        },
+      );
+    });
   });
 
   router.delete("/cart/:id", (req, res) => {
     const id = Number(req.params.id);
-    db.run("DELETE FROM cart_items WHERE id = ?", [id], function (err) {
-      if (err)
-        return res.status(500).json({ message: "Failed to remove item" });
-      if (this.changes === 0)
+
+    db.get("SELECT * FROM cart_items WHERE id = ?", [id], (err, item) => {
+      if (err || !item)
         return res.status(404).json({ message: "Cart item not found" });
-      res.json({ success: true });
+
+      db.run("DELETE FROM cart_items WHERE id = ?", [id], function (err2) {
+        if (err2)
+          return res.status(500).json({ message: "Failed to remove item" });
+        db.run("UPDATE products SET stock = stock + ? WHERE id = ?", [
+          item.quantity,
+          item.product_id,
+        ]);
+        res.json({ success: true });
+      });
     });
   });
+  
   return router;
 };
