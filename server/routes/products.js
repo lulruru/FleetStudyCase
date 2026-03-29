@@ -37,5 +37,31 @@ module.exports = (db) => {
       },
     );
   });
+  router.put("/products/:id", (req, res) => {
+    const id = Number(req.params.id);
+    const { name, description, price, stock } = req.body || {};
+    if (!name || price == null)
+      return res.status(400).json({ message: "name and price are required" });
+
+    db.run(
+      "UPDATE products SET name = ?, description = ?, price = ?, stock = ? WHERE id = ?",
+      [name.trim(), description || "", Number(price), Number(stock) || 0, id],
+      function (err) {
+        if (err)
+          return res
+            .status(500)
+            .json({ message: "Failed to update product", detail: err.message });
+        if (this.changes === 0)
+          return res.status(404).json({ message: "Product not found" });
+        db.get("SELECT * FROM products WHERE id = ?", [id], (err2, row) => {
+          if (err2)
+            return res
+              .status(500)
+              .json({ message: "Updated but failed to fetch" });
+          res.json(row);
+        });
+      },
+    );
+  });
   return router;
 };
