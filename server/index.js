@@ -483,10 +483,10 @@ app.delete("/api/devices/:id", (req, res) => {
   );
 });
 
+app.use("/api", require("./routes/products")(db));
+app.use("/api", require("./routes/cart")(db));
+app.use("/api", require("./routes/orders")(db));
+
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
 });
-
-// Product
-
-app.get("/")
