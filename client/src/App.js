@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import * as api from "./api";
+import Catalog from "./components/Catalog";
+import Cart from "./components/Cart";
+import Orders from "./components/Orders";
 
 const DEFAULT_EMPLOYEE_FORM = { name: "", role: "" };
 const DEFAULT_DEVICE_FORM = { name: "", type: "Laptop", ownerId: "" };
@@ -31,7 +35,10 @@ function App() {
   const [ownerNameById, setOwnerNameById] = useState({});
   const [loadingOwnerNames, setLoadingOwnerNames] = useState(false);
   const [lastRefreshAt, setLastRefreshAt] = useState("");
-
+  const [products, setProducts] = useState([]);
+  const [cart, setCart] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [cartOpen, setCartOpen] = useState(false);
   const roleOptions = useMemo(() => {
     const set = new Set();
     employees.forEach((employee) => {
@@ -100,6 +107,9 @@ function App() {
   useEffect(() => {
     fetchEmployees();
     fetchDevices();
+    loadProducts();
+    loadCart();
+    loadOrders();
   }, []);
 
   useEffect(() => {
@@ -357,6 +367,7 @@ function App() {
       }
       setStatusMessage("Employee deleted");
       await fetchEmployees();
+	  await fetchDevices();
     } catch (error) {
       setErrors((prev) => [
         ...prev,
@@ -419,7 +430,49 @@ function App() {
     setDeviceForm(DEFAULT_DEVICE_FORM);
     setEditingDeviceId(null);
   }
+  async function loadProducts() {
+    const json = await api.fetchProducts();
+    setProducts(Array.isArray(json) ? json : []);
+  }
 
+  async function loadCart() {
+    const json = await api.fetchCart();
+    setCart(Array.isArray(json) ? json : []);
+  }
+
+  async function loadOrders() {
+    const json = await api.fetchOrders();
+    setOrders(Array.isArray(json) ? json : []);
+  }
+
+  async function handleAddToCart(productId) {
+    await api.addToCart(productId);
+    await loadCart();
+	await loadProducts(); 
+    setCartOpen(true);
+  }
+
+  async function handleUpdateQuantity(cartItemId, quantity) {
+    await api.updateCartQuantity(cartItemId, quantity);
+	await loadProducts(); 
+    await loadCart();
+  }
+
+  async function handleRemoveFromCart(cartItemId) {
+    await api.removeFromCart(cartItemId);
+	await loadProducts(); 
+    await loadCart();
+  }
+
+  async function handleCheckout() {
+    const json = await api.checkout();
+    if (json.success) {
+      await loadCart();
+      await loadOrders();
+      setCartOpen(false);
+      setStatusMessage("Order placed successfully!");
+    }
+  }
   return (
     <div className="app-page">
       <header className="app-header">
@@ -460,6 +513,24 @@ function App() {
           type="button"
         >
           Devices
+        </button>
+        <button
+          className={
+            activeTab === "catalog" ? "tab-button active" : "tab-button"
+          }
+          onClick={() => setActiveTab("catalog")}
+          type="button"
+        >
+          Catalog
+        </button>
+        <button
+          className={
+            activeTab === "orders" ? "tab-button active" : "tab-button"
+          }
+          onClick={() => setActiveTab("orders")}
+          type="button"
+        >
+          Orders
         </button>
         <button
           type="button"
@@ -757,6 +828,26 @@ function App() {
               </tbody>
             </table>
           </section>
+        ) : null}
+        {activeTab === "catalog" ? (
+          <Catalog
+            products={products}
+            onAddToCart={handleAddToCart}
+            onOpenCart={() => setCartOpen(true)}
+            onProductCreated={loadProducts}
+          />
+        ) : null}
+
+        {activeTab === "orders" ? <Orders orders={orders} /> : null}
+
+        {cartOpen ? (
+          <Cart
+            cart={cart}
+            onUpdateQuantity={handleUpdateQuantity}
+            onRemove={handleRemoveFromCart}
+            onCheckout={handleCheckout}
+            onClose={() => setCartOpen(false)}
+          />
         ) : null}
       </main>
     </div>
