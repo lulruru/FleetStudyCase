@@ -367,7 +367,7 @@ function App() {
       }
       setStatusMessage("Employee deleted");
       await fetchEmployees();
-	  //await fetchDevices();
+	  await fetchDevices();
     } catch (error) {
       setErrors((prev) => [
         ...prev,
